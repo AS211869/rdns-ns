@@ -21,7 +21,7 @@ Each prefix that the DNS server should handle should be configured in `config.js
 
 The record format **must** be unique for each prefix for the `AAAA` lookups to work properly. Similarly, the prefixes must be unique and not overlapping.
 
-A script (`iptables.sh`) has been included to configure the neccessary iptables rules. Modify the command to include the rDNS NS IP addresses before using.
+To allow rDNS NS to bind to port 53, you will need to run the following command: `sudo setcap 'cap_net_bind_service=+ep' $(readlink -f $(which node))`.
 
 # DNS Delegation
 

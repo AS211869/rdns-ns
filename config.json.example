@@ -15,5 +15,8 @@
 			"recordFormat": "cam-{addr}.rdns.isp.example",
 			"static": []
 		}
-	]
+	],
+	"listenOn": "198.51.100.53",
+	"listenOnV6": "2001:db8:5300::53",
+	"listenPort": 53
 }
