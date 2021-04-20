@@ -222,6 +222,7 @@ function answerQuery(query, packet, type, sender, server) {
 				type: 'PTR',
 				class: 'IN',
 				name: query.name,
+				ttl: 900,
 				data: record
 			}];
 
@@ -236,6 +237,7 @@ function answerQuery(query, packet, type, sender, server) {
 				type: 'AAAA',
 				class: 'IN',
 				name: query.name,
+				ttl: 900,
 				data: staticAddress
 			}];
 		} else {
@@ -254,6 +256,7 @@ function answerQuery(query, packet, type, sender, server) {
 					type: 'AAAA',
 					class: 'IN',
 					name: query.name,
+					ttl: 900,
 					data: addColons
 				}];
 			}
@@ -321,6 +324,7 @@ function createNSData(queryName) {
 			type: 'NS',
 			class: 'IN',
 			name: queryName,
+			ttl: 900,
 			data: ns
 		});
 	});
