@@ -1,7 +1,8 @@
 const dgram = require('dgram');
-const serverV4 = dgram.createSocket('udp6');
+const serverV4 = dgram.createSocket('udp4');
 const serverV6 = dgram.createSocket('udp6');
-const serverTCP = require('net').createServer();
+const serverTCPV4 = require('net').createServer();
+const serverTCPV6 = require('net').createServer();
 const { EventEmitter } = require('events');
 const dnsPacket = require('dns-packet');
 const ip6 = require('ip6');
@@ -143,9 +144,14 @@ serverV6.on('error', (err) => {
 	serverV6.close();
 });
 
-serverTCP.on('error', (err) => {
+serverTCPV4.on('error', (err) => {
 	console.log(`server error:\n${err.stack}`);
-	serverTCP.close();
+	serverTCPV4.close();
+});
+
+serverTCPV6.on('error', (err) => {
+	console.log(`server error:\n${err.stack}`);
+	serverTCPV6.close();
 });
 
 serverV4.on('message', (msg, rinfo) => {
@@ -158,7 +164,19 @@ serverV6.on('message', (msg, rinfo) => {
 	event.emit('query', 'udp', msg, rinfo, serverV6);
 });
 
-serverTCP.on('connection', (socket) => {
+serverTCPV4.on('connection', (socket) => {
+	console.log(`TCP connection from ${socket.remoteAddress}:${socket.remotePort}`);
+	socket.on('data', function(data) {
+		//console.log(data.toString());
+		event.emit('query', 'tcp', data, {
+			address: socket.remoteAddress,
+			port: socket.remotePort,
+			socket
+		});
+	});
+});
+
+serverTCPV6.on('connection', (socket) => {
 	console.log(`TCP connection from ${socket.remoteAddress}:${socket.remotePort}`);
 	socket.on('data', function(data) {
 		//console.log(data.toString());
@@ -319,7 +337,7 @@ event.on('query', function(type, msg, rinfo, server) {
 	}
 
 	try {
-		answerQuery(query, packet, type, rinfo);
+		answerQuery(query, packet, type, rinfo, server);
 	} catch (e) {
 		console.error(`Failed to answer query: ${e.message}`);
 
@@ -337,12 +355,18 @@ serverV6.on('listening', () => {
 	console.log(`UDP server listening ${address.address}:${address.port}`);
 });
 
-serverV4.bind(41514, config.listenOn);
-serverV6.bind(41514, config.listenOnV6);
+serverV4.bind(config.listenPort, config.listenOn);
+serverV6.bind(config.listenPort, config.listenOnV6);
 
-serverTCP.on('listening', () => {
-	const address = serverTCP.address();
+serverTCPV4.on('listening', () => {
+	const address = serverTCPV4.address();
 	console.log(`TCP server listening ${address.address}:${address.port}`);
 });
 
-serverTCP.listen(41514, '::');
+serverTCPV6.on('listening', () => {
+	const address = serverTCPV6.address();
+	console.log(`TCP server listening ${address.address}:${address.port}`);
+});
+
+serverTCPV4.listen(config.listenPort, config.listenOn);
+serverTCPV6.listen(config.listenPort, config.listenOnV6);
