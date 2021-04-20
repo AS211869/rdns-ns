@@ -1,5 +1,6 @@
 const dgram = require('dgram');
-const server = dgram.createSocket('udp6');
+const serverV4 = dgram.createSocket('udp6');
+const serverV6 = dgram.createSocket('udp6');
 const serverTCP = require('net').createServer();
 const { EventEmitter } = require('events');
 const dnsPacket = require('dns-packet');
@@ -132,9 +133,14 @@ function chunk(str, n) {
 
 var event = new EventEmitter();
 
-server.on('error', (err) => {
+serverV4.on('error', (err) => {
 	console.log(`server error:\n${err.stack}`);
-	server.close();
+	serverV4.close();
+});
+
+serverV6.on('error', (err) => {
+	console.log(`server error:\n${err.stack}`);
+	serverV6.close();
 });
 
 serverTCP.on('error', (err) => {
@@ -142,9 +148,14 @@ serverTCP.on('error', (err) => {
 	serverTCP.close();
 });
 
-server.on('message', (msg, rinfo) => {
+serverV4.on('message', (msg, rinfo) => {
 	console.log(`UDP connection from ${rinfo.address}:${rinfo.port}`);
-	event.emit('query', 'udp', msg, rinfo);
+	event.emit('query', 'udp', msg, rinfo, serverV4);
+});
+
+serverV6.on('message', (msg, rinfo) => {
+	console.log(`UDP connection from ${rinfo.address}:${rinfo.port}`);
+	event.emit('query', 'udp', msg, rinfo, serverV6);
 });
 
 serverTCP.on('connection', (socket) => {
@@ -159,7 +170,7 @@ serverTCP.on('connection', (socket) => {
 	});
 });
 
-function answerQuery(query, packet, type, sender) {
+function answerQuery(query, packet, type, sender, server) {
 	var answerData = {
 		type: 'response',
 		id: packet ? packet.id : null,
@@ -246,7 +257,7 @@ function answerQuery(query, packet, type, sender) {
 
 }
 
-function answerError(query, packet, type, rinfo, error) {
+function answerError(query, packet, type, rinfo, server, error) {
 	var answerDataError = {
 		type: 'response',
 		id: packet ? packet.id : null,
@@ -271,7 +282,7 @@ function answerError(query, packet, type, rinfo, error) {
 	}
 }
 
-event.on('query', function(type, msg, rinfo) {
+event.on('query', function(type, msg, rinfo, server) {
 	//console.log(`server got: ${msg} from ${rinfo.address}:${rinfo.port}`);
 	let packet;
 	if (type === 'udp') {
@@ -302,7 +313,7 @@ event.on('query', function(type, msg, rinfo) {
 			throw new Error();
 		}
 	} catch (e) {
-		answerError(query, packet, type, rinfo, _throwError);
+		answerError(query, packet, type, rinfo, server, _throwError);
 
 		return;
 	}
@@ -312,19 +323,25 @@ event.on('query', function(type, msg, rinfo) {
 	} catch (e) {
 		console.error(`Failed to answer query: ${e.message}`);
 
-		answerError(query, packet, type, rinfo, _throwError);
+		answerError(query, packet, type, rinfo, server, _throwError);
 	}
 });
 
-server.on('listening', () => {
-	const address = server.address();
+serverV4.on('listening', () => {
+	const address = serverV4.address();
 	console.log(`UDP server listening ${address.address}:${address.port}`);
 });
 
-server.bind(41514, '::');
+serverV6.on('listening', () => {
+	const address = serverV6.address();
+	console.log(`UDP server listening ${address.address}:${address.port}`);
+});
+
+serverV4.bind(41514, config.listenOn);
+serverV6.bind(41514, config.listenOnV6);
 
 serverTCP.on('listening', () => {
-	const address = server.address();
+	const address = serverTCP.address();
 	console.log(`TCP server listening ${address.address}:${address.port}`);
 });
 
