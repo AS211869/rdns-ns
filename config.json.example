@@ -1,0 +1,19 @@
+{
+	"prefixes": [
+		{
+			"prefix": "2001:db8:1234:5600::/56",
+			"recordFormat": "lon-{addr}.rdns.isp.example",
+			"static": [
+				{
+					"address": "2001:db8:1234:5600::1",
+					"record": "lon-router01.isp.example"
+				}
+			]
+		},
+		{
+			"prefix": "2001:db8:1234:5900::/56",
+			"recordFormat": "cam-{addr}.rdns.isp.example",
+			"static": []
+		}
+	]
+}

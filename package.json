@@ -1,0 +1,16 @@
+{
+  "name": "rdns-ns",
+  "version": "0.0.1",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "TrueWinter",
+  "license": "MIT",
+  "dependencies": {
+    "dns-packet": "^5.2.1",
+    "ip6": "^0.2.6",
+    "is-in-subnet": "^4.0.1"
+  }
+}
