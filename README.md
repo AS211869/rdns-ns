@@ -21,6 +21,10 @@ Each prefix that the DNS server should handle should be configured in `config.js
 
 The record format **must** be unique for each prefix for the `AAAA` lookups to work properly. Similarly, the prefixes must be unique and not overlapping.
 
+The `listenOn` and `listenOnV6` configuration options are also required.
+
+You should also configure the `thisNS` setting. Set this to the delegated nameserver record (see the DNS Delegation section below). These nameservers will be returned whenever an `NS` request is received for a prefix or root reverse DNS record defined in the config (e.g. `9.5.4.3.2.1.8.b.d.0.1.0.0.2.ip6.arpa` and `rdns.isp.example.com` from the above example).
+
 To allow rDNS NS to bind to port 53, you will need to run the following command: `sudo setcap 'cap_net_bind_service=+ep' $(readlink -f $(which node))`.
 
 # DNS Delegation

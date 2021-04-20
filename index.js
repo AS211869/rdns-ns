@@ -314,6 +314,62 @@ function answerError(query, packet, type, rinfo, server, error) {
 	}
 }
 
+function createNSData(queryName) {
+	var thisNS = [];
+	config.thisNS.forEach(ns => {
+		thisNS.push({
+			type: 'NS',
+			class: 'IN',
+			name: queryName,
+			data: ns
+		});
+	});
+
+	return thisNS;
+}
+
+function answerNS(query, packet, type, rinfo, server) {
+	var answerData = {
+		type: 'response',
+		id: packet ? packet.id : null,
+		flags: dnsPacket.RECURSION_DESIRED | dnsPacket.AUTHORITATIVE_ANSWER,
+		questions: [query],
+		answers: []
+	};
+
+	if (query.name.match(/\.ip6\.arpa$/)) {
+		prefixes.forEach(prefix => {
+			var prefixWithoutLength = removePrefixLength(prefix.prefix);
+			var unchangeablePart = getUnchangeablePart(prefixWithoutLength);
+			var ptrRoot = chunk(unchangeablePart, 1).reverse().join('.').concat('.ip6.arpa');
+			if (query.name === ptrRoot) {
+				answerData.answers = createNSData(query.name);
+			} else {
+				answerData.flags = NXDOMAIN_RCODE;
+			}
+		});
+	} else {
+		var prefixesWithThisName = prefixes.filter(prefix => prefix.recordFormat.split('.').slice(1).join('.') === query.name);
+		if (prefixesWithThisName.length > 0) {
+			answerData.answers = createNSData(query.name);
+		} else {
+			answerData.flags = NXDOMAIN_RCODE;
+		}
+	}
+
+	if (type === 'udp') {
+		server.send(dnsPacket.encode(answerData), rinfo.port, rinfo.address, function(err) {
+			if (err) {
+				return console.error(err);
+			}
+		});
+	} else {
+		rinfo.socket.write(dnsPacket.streamEncode(answerData), function() {
+			rinfo.socket.end();
+		});
+	}
+}
+
 event.on('query', function(type, msg, rinfo, server) {
 	//console.log(`server got: ${msg} from ${rinfo.address}:${rinfo.port}`);
 	let packet;
@@ -332,7 +388,7 @@ event.on('query', function(type, msg, rinfo, server) {
 		query = packet.questions[0];
 
 		//var supportedTypes = ['A', 'AAAA', 'CNAME', 'MX', 'NS', 'PTR', 'SRV', 'TXT'];
-		var supportedTypes = ['A', 'AAAA', 'PTR'];
+		var supportedTypes = ['A', 'AAAA', 'PTR', 'NS'];
 
 		if (!supportedTypes.includes(query.type)) {
 			_throwError = NOTIMP_RCODE;
@@ -348,6 +404,16 @@ event.on('query', function(type, msg, rinfo, server) {
 		answerError(query, packet, type, rinfo, server, _throwError);
 
 		return;
+	}
+
+	try {
+		if (query.type === 'NS') {
+			return answerNS(query, packet, type, rinfo, server);
+		}
+	} catch (e) {
+		console.error(`Failed to answer query: ${e.message}`);
+
+		answerError(query, packet, type, rinfo, server, _throwError);
 	}
 
 	try {
