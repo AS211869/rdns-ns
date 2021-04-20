@@ -300,11 +300,11 @@ function answerError(query, packet, type, rinfo, server, error) {
 				return console.error(err);
 			}
 
-			console.log(`Received invalid UDP request from ${rinfo.address}. Answered with error code: 0x0${error}`);
+			console.log(`Received invalid UDP request from ${rinfo.address}. Query ${query.type} ${query.name}. Answered with error code: 0x0${error}`);
 		});
 	} else {
 		rinfo.socket.write(dnsPacket.streamEncode(answerDataError), function() {
-			console.log(`Received invalid TCP request from ${rinfo.address}. Answered with error code: 0x0${error}`);
+			console.log(`Received invalid TCP request from ${rinfo.address}. Query ${query.type} ${query.name}. Answered with error code: 0x0${error}`);
 			rinfo.socket.end();
 		});
 	}
