@@ -155,17 +155,23 @@ serverTCPV6.on('error', (err) => {
 });
 
 serverV4.on('message', (msg, rinfo) => {
-	console.log(`UDP connection from ${rinfo.address}:${rinfo.port}`);
+	if (config.debug) {
+		console.log(`UDP connection from ${rinfo.address}:${rinfo.port}`);
+	}
 	event.emit('query', 'udp', msg, rinfo, serverV4);
 });
 
 serverV6.on('message', (msg, rinfo) => {
-	console.log(`UDP connection from ${rinfo.address}:${rinfo.port}`);
+	if (config.debug) {
+		console.log(`UDP connection from ${rinfo.address}:${rinfo.port}`);
+	}
 	event.emit('query', 'udp', msg, rinfo, serverV6);
 });
 
 serverTCPV4.on('connection', (socket) => {
-	console.log(`TCP connection from ${socket.remoteAddress}:${socket.remotePort}`);
+	if (config.debug) {
+		console.log(`TCP connection from ${socket.remoteAddress}:${socket.remotePort}`);
+	}
 	socket.on('data', function(data) {
 		//console.log(data.toString());
 		event.emit('query', 'tcp', data, {
@@ -177,7 +183,9 @@ serverTCPV4.on('connection', (socket) => {
 });
 
 serverTCPV6.on('connection', (socket) => {
-	console.log(`TCP connection from ${socket.remoteAddress}:${socket.remotePort}`);
+	if (config.debug) {
+		console.log(`TCP connection from ${socket.remoteAddress}:${socket.remotePort}`);
+	}
 	socket.on('data', function(data) {
 		//console.log(data.toString());
 		event.emit('query', 'tcp', data, {
@@ -242,8 +250,6 @@ function answerQuery(query, packet, type, sender, server) {
 				// eslint-disable-next-line no-redeclare
 				var addColons = ip6.abbreviate(chunk(ipWithoutColons, 4).join(':'));
 
-				console.log(addColons);
-
 				answerData.answers = [{
 					type: 'AAAA',
 					class: 'IN',
@@ -264,11 +270,15 @@ function answerQuery(query, packet, type, sender, server) {
 				return console.error(err);
 			}
 
-			console.log(`Answered UDP request: ${query.type} ${query.name} for ${sender.address}`);
+			if (config.debug) {
+				console.log(`Answered UDP request: ${query.type} ${query.name} for ${sender.address}`);
+			}
 		});
 	} else {
 		sender.socket.write(dnsPacket.streamEncode(answerData), function() {
-			console.log(`Answered TCP request: ${query.type} ${query.name} for ${sender.address}`);
+			if (config.debug) {
+				console.log(`Answered TCP request: ${query.type} ${query.name} for ${sender.address}`);
+			}
 			sender.socket.end();
 		});
 	}
