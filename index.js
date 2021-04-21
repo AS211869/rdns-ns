@@ -351,6 +351,9 @@ function answerNS(query, packet, type, rinfo, server) {
 		prefixes.forEach(prefix => {
 			var prefixWithoutLength = removePrefixLength(prefix.prefix);
 			var unchangeablePart = getUnchangeablePart(prefixWithoutLength);
+			if (parseInt(getPrefixLength(prefix.prefix)) % 4 !== 0) {
+				unchangeablePart += query.name.split('.')[0];
+			}
 			var ptrRoot = chunk(unchangeablePart, 1).reverse().join('.').concat('.ip6.arpa');
 			if (query.name === ptrRoot) {
 				answerData.answers = createNSData(query.name);
