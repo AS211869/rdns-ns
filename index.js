@@ -444,6 +444,10 @@ event.on('query', function(type, msg, rinfo, server) {
 		answers: []
 	};
 
+	if (Object.keys(cache).length > config.maxCache) {
+		cache = {};
+	}
+
 	try {
 		if (query.type === 'NS') {
 			if (Object.prototype.hasOwnProperty.call(cache, query.name)) {
