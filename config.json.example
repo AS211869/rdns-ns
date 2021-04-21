@@ -20,6 +20,8 @@
 		"rdns-ns1.isp.example",
 		"rdns-ns2.isp.example"
 	],
+	"maxCache": 10000,
+	"ttl": 900,
 	"listenOn": "198.51.100.53",
 	"listenOnV6": "2001:db8:5300::53",
 	"listenPort": 53,
