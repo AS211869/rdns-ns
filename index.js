@@ -17,6 +17,8 @@ let REFUSED_RCODE = 0x05;
 var config = require('./config.json');
 var prefixes = config.prefixes;
 
+var cache = {};
+
 function removePrefixLength(prefix) {
 	return prefix.replace(/\/[0-9]{1,3}$/, '');
 }
@@ -222,7 +224,7 @@ function answerQuery(query, packet, type, sender, server) {
 				type: 'PTR',
 				class: 'IN',
 				name: query.name,
-				ttl: 900,
+				ttl: config.ttl,
 				data: record
 			}];
 
@@ -256,7 +258,7 @@ function answerQuery(query, packet, type, sender, server) {
 					type: 'AAAA',
 					class: 'IN',
 					name: query.name,
-					ttl: 900,
+					ttl: config.ttl,
 					data: addColons
 				}];
 			}
@@ -265,6 +267,10 @@ function answerQuery(query, packet, type, sender, server) {
 
 	if ([NXDOMAIN_RCODE, REFUSED_RCODE].includes(answerData.flags)) {
 		answerData.answers = [];
+	} else {
+		cache[query.name] = {};
+		cache[query.name].answers = answerData.answers;
+		cache[query.name].expiry = Date.now() + (config.ttl * 1000);
 	}
 
 	if (type === 'udp') {
@@ -324,7 +330,7 @@ function createNSData(queryName) {
 			type: 'NS',
 			class: 'IN',
 			name: queryName,
-			ttl: 900,
+			ttl: config.ttl,
 			data: ns
 		});
 	});
@@ -348,6 +354,9 @@ function answerNS(query, packet, type, rinfo, server) {
 			var ptrRoot = chunk(unchangeablePart, 1).reverse().join('.').concat('.ip6.arpa');
 			if (query.name === ptrRoot) {
 				answerData.answers = createNSData(query.name);
+				cache[query.name] = {};
+				cache[query.name].answers = answerData.answers;
+				cache[query.name].expiry = Date.now() + (config.ttl * 1000);
 			} else {
 				answerData.flags = NXDOMAIN_RCODE;
 			}
@@ -356,11 +365,28 @@ function answerNS(query, packet, type, rinfo, server) {
 		var prefixesWithThisName = prefixes.filter(prefix => prefix.recordFormat.split('.').slice(1).join('.') === query.name);
 		if (prefixesWithThisName.length > 0) {
 			answerData.answers = createNSData(query.name);
+			cache[query.name] = {};
+			cache[query.name].answers = answerData.answers;
+			cache[query.name].expiry = Date.now() + (config.ttl * 1000);
 		} else {
 			answerData.flags = NXDOMAIN_RCODE;
 		}
 	}
 
+	if (type === 'udp') {
+		server.send(dnsPacket.encode(answerData), rinfo.port, rinfo.address, function(err) {
+			if (err) {
+				return console.error(err);
+			}
+		});
+	} else {
+		rinfo.socket.write(dnsPacket.streamEncode(answerData), function() {
+			rinfo.socket.end();
+		});
+	}
+}
+
+function answerCache(answerData, type, rinfo, server) {
 	if (type === 'udp') {
 		server.send(dnsPacket.encode(answerData), rinfo.port, rinfo.address, function(err) {
 			if (err) {
@@ -410,17 +436,50 @@ event.on('query', function(type, msg, rinfo, server) {
 		return;
 	}
 
+	var answerData = {
+		type: 'response',
+		id: packet ? packet.id : null,
+		flags: dnsPacket.RECURSION_DESIRED | dnsPacket.AUTHORITATIVE_ANSWER,
+		questions: [query],
+		answers: []
+	};
+
 	try {
 		if (query.type === 'NS') {
+			if (Object.prototype.hasOwnProperty.call(cache, query.name)) {
+				if (cache[query.name].expiry > Date.now()) {
+					cache[query.name].answers.forEach(answer => {
+						answer.ttl = Math.round((cache[query.name].expiry - Date.now()) / 1000);
+					});
+
+					answerData.answers = cache[query.name].answers;
+					return answerCache(answerData, type, rinfo, server);
+				} else {
+					delete cache[query.name];
+				}
+			}
 			return answerNS(query, packet, type, rinfo, server);
 		}
 	} catch (e) {
 		console.error(`Failed to answer query: ${e.message}`);
+		console.error(e);
 
 		answerError(query, packet, type, rinfo, server, _throwError);
 	}
 
 	try {
+		if (Object.prototype.hasOwnProperty.call(cache, query.name)) {
+			if (cache[query.name].expiry > Date.now()) {
+				cache[query.name].answers.forEach(answer => {
+					answer.ttl = Math.round((cache[query.name].expiry - Date.now()) / 1000);
+				});
+
+				answerData.answers = cache[query.name].answers;
+				return answerCache(answerData, type, rinfo, server);
+			} else {
+				delete cache[query.name];
+			}
+		}
 		answerQuery(query, packet, type, rinfo, server);
 	} catch (e) {
 		console.error(`Failed to answer query: ${e.message}`);
