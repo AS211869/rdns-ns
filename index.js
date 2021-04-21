@@ -465,8 +465,9 @@ event.on('query', function(type, msg, rinfo, server) {
 			return answerNS(query, packet, type, rinfo, server);
 		}
 	} catch (e) {
-		console.error(`Failed to answer query: ${e.message}`);
-		console.error(e);
+		if (config.logErrors) {
+			console.error(`Failed to answer query: ${e.message}`);
+		}
 
 		answerError(query, packet, type, rinfo, server, _throwError);
 	}
@@ -486,7 +487,9 @@ event.on('query', function(type, msg, rinfo, server) {
 		}
 		answerQuery(query, packet, type, rinfo, server);
 	} catch (e) {
-		console.error(`Failed to answer query: ${e.message}`);
+		if (config.logErrors) {
+			console.error(`Failed to answer query: ${e.message}`);
+		}
 
 		answerError(query, packet, type, rinfo, server, _throwError);
 	}
