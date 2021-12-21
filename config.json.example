@@ -20,6 +20,7 @@
 		"rdns-ns1.isp.example",
 		"rdns-ns2.isp.example"
 	],
+	"idServer": "lon01",
 	"maxCache": 10000,
 	"ttl": 900,
 	"listenOn": "198.51.100.53",

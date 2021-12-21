@@ -5,6 +5,7 @@ const serverTCPV4 = require('net').createServer();
 const serverTCPV6 = require('net').createServer();
 const { EventEmitter } = require('events');
 const dnsPacket = require('dns-packet');
+const os = require('os');
 const ip6 = require('ip6');
 const isInSubnet = require('is-in-subnet').isInSubnet;
 
@@ -16,6 +17,9 @@ let REFUSED_RCODE = 0x05;
 
 var config = require('./config.json');
 var prefixes = config.prefixes;
+
+var hostname = os.hostname();
+var version = `rdns-ns v${require('./package.json').version}`;
 
 var cache = {};
 
@@ -389,6 +393,51 @@ function answerNS(query, packet, type, rinfo, server) {
 	}
 }
 
+function answerTXTCH(query, packet, type, rinfo, server) {
+	var questions = {
+		'version.bind': version,
+		'hostname.bind': hostname
+	};
+
+	if (config.idServer) {
+		questions['id.server'] = config.idServer;
+	}
+
+	var answerData = {
+		type: 'response',
+		id: packet ? packet.id : null,
+		flags: dnsPacket.RECURSION_DESIRED | dnsPacket.AUTHORITATIVE_ANSWER,
+		questions: [query],
+		answers: []
+	};
+
+	var answersTmp = {
+		type: 'TXT',
+		class: 'CH',
+		name: query.name,
+		data: ''
+	};
+
+	if (Object.prototype.hasOwnProperty.call(questions, query.name)) {
+		answersTmp.data = questions[query.name];
+		answerData.answers = [answersTmp];
+	} else {
+		answerData.flags |= REFUSED_RCODE;
+	}
+
+	if (type === 'udp') {
+		server.send(dnsPacket.encode(answerData), rinfo.port, rinfo.address, function(err) {
+			if (err) {
+				return console.error(err);
+			}
+		});
+	} else {
+		rinfo.socket.write(dnsPacket.streamEncode(answerData), function() {
+			rinfo.socket.end();
+		});
+	}
+}
+
 function answerCache(answerData, type, rinfo, server) {
 	if (type === 'udp') {
 		server.send(dnsPacket.encode(answerData), rinfo.port, rinfo.address, function(err) {
@@ -422,6 +471,10 @@ event.on('query', function(type, msg, rinfo, server) {
 
 		//var supportedTypes = ['A', 'AAAA', 'CNAME', 'MX', 'NS', 'PTR', 'SRV', 'TXT'];
 		var supportedTypes = ['A', 'AAAA', 'PTR', 'NS'];
+
+		if (query.type === 'TXT' && query.class === 'CH') {
+			return answerTXTCH(query, packet, type, rinfo, server);
+		}
 
 		if (!supportedTypes.includes(query.type)) {
 			_throwError = NOTIMP_RCODE;
