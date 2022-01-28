@@ -263,35 +263,43 @@ function answerQuery(query, packet, type, sender, server) {
 			}
 		}
 	} else if (query.type === 'AAAA') {
-		var staticAddress = getStaticAddressFromRecord(query.name);
-		if (staticAddress) {
-			answerData.answers = [{
-				type: 'AAAA',
-				class: 'IN',
-				name: query.name,
-				ttl: 900,
-				data: staticAddress
-			}];
+		var shouldRefuse = isPrefixDomainAllowed(query.name);
+		if (!shouldRefuse) {
+			answerData.flags = REFUSED_RCODE;
 		} else {
-			var shouldRefuse = isPrefixDomainAllowed(query.name);
-			if (!shouldRefuse) {
-				answerData.flags = REFUSED_RCODE;
-			} else {
-				var prefix = getPrefixFromRecord(query.name);
-				var prefixWithoutLength = removePrefixLength(prefix);
-
-				var ipWithoutColons = getUnchangeablePart(prefixWithoutLength).concat(getUnchangeablePartFromRecord(query.name));
-
-				// eslint-disable-next-line no-redeclare
-				var addColons = ip6.abbreviate(chunk(ipWithoutColons, 4).join(':'));
-
+			var staticAddress = getStaticAddressFromRecord(query.name);
+			if (staticAddress) {
 				answerData.answers = [{
 					type: 'AAAA',
 					class: 'IN',
 					name: query.name,
-					ttl: config.ttl,
-					data: addColons
+					ttl: 900,
+					data: staticAddress
 				}];
+			} else {
+				var prefix;
+				try {
+					prefix = getPrefixFromRecord(query.name);
+				} catch (_) {
+					// do nothing
+				}
+
+				if (prefix) {
+					var prefixWithoutLength = removePrefixLength(prefix);
+
+					var ipWithoutColons = getUnchangeablePart(prefixWithoutLength).concat(getUnchangeablePartFromRecord(query.name));
+
+					// eslint-disable-next-line no-redeclare
+					var addColons = ip6.abbreviate(chunk(ipWithoutColons, 4).join(':'));
+
+					answerData.answers = [{
+						type: 'AAAA',
+						class: 'IN',
+						name: query.name,
+						ttl: config.ttl,
+						data: addColons
+					}];
+				}
 			}
 		}
 	} else {
@@ -578,6 +586,7 @@ event.on('query', function(type, msg, rinfo, server) {
 	} catch (e) {
 		if (config.logErrors) {
 			console.error(`Failed to answer query: ${e.message}`);
+			console.error(e);
 		}
 
 		answerError(query, packet, type, rinfo, server, _throwError);
@@ -600,6 +609,7 @@ event.on('query', function(type, msg, rinfo, server) {
 	} catch (e) {
 		if (config.logErrors) {
 			console.error(`Failed to answer query: ${e.message}`);
+			console.error(e);
 		}
 
 		answerError(query, packet, type, rinfo, server, _throwError);
