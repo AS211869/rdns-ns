@@ -99,7 +99,7 @@ function getStaticAddressFromRecord(record) {
 
 function getPrefixFromRecord(record) {
 	var prefix = prefixes.filter(prefix => {
-		var _regex = `^${prefix.recordFormat.replace('{addr}', '[0-9a-f]+').replace(/\./g, '\\.')}$`;
+		var _regex = `${prefix.recordFormat.replace('{addr}', '[0-9a-f]+').replace(/\./g, '\\.')}$`;
 		var regex = new RegExp(_regex);
 
 		return regex.test(record);
