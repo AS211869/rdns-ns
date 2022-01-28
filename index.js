@@ -10,10 +10,11 @@ const ip6 = require('ip6');
 const isInSubnet = require('is-in-subnet').isInSubnet;
 
 // https://support.umbrella.com/hc/en-us/articles/232254248-Common-DNS-return-codes-for-any-DNS-service-and-Umbrella-
-let SERVFAIL_RCODE = 0x02;
-let NXDOMAIN_RCODE = 0x03;
-let NOTIMP_RCODE = 0x04;
-let REFUSED_RCODE = 0x05;
+const NOERROR_RCODE = 0x00;
+const SERVFAIL_RCODE = 0x02;
+const NXDOMAIN_RCODE = 0x03;
+const NOTIMP_RCODE = 0x04;
+const REFUSED_RCODE = 0x05;
 
 var config = require('./config.json');
 var prefixes = config.prefixes;
@@ -224,17 +225,19 @@ function answerQuery(query, packet, type, sender, server) {
 
 			var record = createRecordFromFormat(shortenedIP);
 
-			answerData.answers = [{
-				type: 'PTR',
-				class: 'IN',
-				name: query.name,
-				ttl: config.ttl,
-				data: record
-			}];
-
-			if (!record) {
-				answerData.flags = REFUSED_RCODE;
+			if (record) {
+				answerData.answers = [{
+					type: 'PTR',
+					class: 'IN',
+					name: query.name,
+					ttl: config.ttl,
+					data: record
+				}];
 			}
+
+			/*if (!record) {
+				answerData.flags = REFUSED_RCODE;
+			}*/
 		}
 	} else if (query.type === 'AAAA') {
 		var staticAddress = getStaticAddressFromRecord(query.name);
@@ -267,9 +270,16 @@ function answerQuery(query, packet, type, sender, server) {
 				}];
 			}
 		}
+	} else {
+		var staticAddressA = getStaticAddressFromRecord(query.name);
+		var prefixA = getPrefixFromRecord(query.name);
+
+		if (!staticAddressA && !prefixA) {
+			answerData.flags = REFUSED_RCODE;
+		}
 	}
 
-	if ([NXDOMAIN_RCODE, REFUSED_RCODE].includes(answerData.flags)) {
+	if ([NXDOMAIN_RCODE, REFUSED_RCODE].includes(answerData.flags) || answerData.answers.length === 0) {
 		answerData.answers = [];
 	} else {
 		cache[query.name] = {};
@@ -481,11 +491,11 @@ event.on('query', function(type, msg, rinfo, server) {
 			throw new Error();
 		}
 
-		if (query.type === 'A') {
+		/*if (query.type === 'A') {
 			// IPv4 is not supported
-			_throwError = REFUSED_RCODE;
+			_throwError = NOERROR_RCODE;
 			throw new Error();
-		}
+		}*/
 	} catch (e) {
 		answerError(query, packet, type, rinfo, server, _throwError);
 
