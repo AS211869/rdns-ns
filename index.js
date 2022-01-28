@@ -99,7 +99,7 @@ function getStaticAddressFromRecord(record) {
 
 function getPrefixFromRecord(record) {
 	var prefix = prefixes.filter(prefix => {
-		var _regex = prefix.recordFormat.replace('{addr}', '[0-9a-f]+').replace(/\./g, '\\.');
+		var _regex = `^${prefix.recordFormat.replace('{addr}', '[0-9a-f]+').replace(/\./g, '\\.')}$`;
 		var regex = new RegExp(_regex);
 
 		return regex.test(record);
@@ -233,11 +233,9 @@ function answerQuery(query, packet, type, sender, server) {
 					ttl: config.ttl,
 					data: record
 				}];
-			}
-
-			/*if (!record) {
+			} else {
 				answerData.flags = REFUSED_RCODE;
-			}*/
+			}
 		}
 	} else if (query.type === 'AAAA') {
 		var staticAddress = getStaticAddressFromRecord(query.name);
@@ -502,10 +500,10 @@ event.on('query', function(type, msg, rinfo, server) {
 			return answerTXTCH(query, packet, type, rinfo, server);
 		}
 
-		if (!supportedTypes.includes(query.type)) {
+		/*if (!supportedTypes.includes(query.type)) {
 			_throwError = NOTIMP_RCODE;
 			throw new Error();
-		}
+		}*/
 
 		/*if (query.type === 'A') {
 			// IPv4 is not supported
