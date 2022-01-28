@@ -10,10 +10,10 @@ const ip6 = require('ip6');
 const isInSubnet = require('is-in-subnet').isInSubnet;
 
 // https://support.umbrella.com/hc/en-us/articles/232254248-Common-DNS-return-codes-for-any-DNS-service-and-Umbrella-
-const NOERROR_RCODE = 0x00;
+//const NOERROR_RCODE = 0x00;
 const SERVFAIL_RCODE = 0x02;
 const NXDOMAIN_RCODE = 0x03;
-const NOTIMP_RCODE = 0x04;
+//const NOTIMP_RCODE = 0x04;
 const REFUSED_RCODE = 0x05;
 
 var config = require('./config.json');
@@ -97,9 +97,27 @@ function getStaticAddressFromRecord(record) {
 	return staticAddress;
 }
 
-function getPrefixFromRecord(record) {
+function isPrefixDomainAllowed(record) {
+	var staticAddress = getStaticAddressFromRecord(record);
+
 	var prefix = prefixes.filter(prefix => {
 		var _regex = `${prefix.recordFormat.replace('{addr}', '[0-9a-f]+').replace(/\./g, '\\.')}$`;
+		var regex = new RegExp(_regex);
+
+		return regex.test(record);
+	})[0];
+
+	//console.log(staticAddress);
+	//console.log(prefix);
+
+	var shouldAllow = staticAddress || prefix;
+
+	return shouldAllow ? true : false;
+}
+
+function getPrefixFromRecord(record) {
+	var prefix = prefixes.filter(prefix => {
+		var _regex = `^${prefix.recordFormat.replace('{addr}', '[0-9a-f]+').replace(/\./g, '\\.')}$`;
 		var regex = new RegExp(_regex);
 
 		return regex.test(record);
@@ -221,9 +239,16 @@ function answerQuery(query, packet, type, sender, server) {
 			var removeDots = removeArpaAndReverse.replace(/\./g, '');
 			var addColons = chunk(removeDots, 4).join(':');
 
-			var shortenedIP = ip6.abbreviate(addColons);
+			var shortenedIP;
+			var record;
+			var _invalidIP = false;
 
-			var record = createRecordFromFormat(shortenedIP);
+			try {
+				shortenedIP = ip6.abbreviate(addColons);
+				record = createRecordFromFormat(shortenedIP);
+			} catch (_) {
+				_invalidIP = true;
+			}
 
 			if (record) {
 				answerData.answers = [{
@@ -233,7 +258,7 @@ function answerQuery(query, packet, type, sender, server) {
 					ttl: config.ttl,
 					data: record
 				}];
-			} else {
+			} else if (!_invalidIP) {
 				answerData.flags = REFUSED_RCODE;
 			}
 		}
@@ -248,10 +273,11 @@ function answerQuery(query, packet, type, sender, server) {
 				data: staticAddress
 			}];
 		} else {
-			var prefix = getPrefixFromRecord(query.name);
-			if (!prefix) {
+			var shouldRefuse = isPrefixDomainAllowed(query.name);
+			if (!shouldRefuse) {
 				answerData.flags = REFUSED_RCODE;
 			} else {
+				var prefix = getPrefixFromRecord(query.name);
 				var prefixWithoutLength = removePrefixLength(prefix);
 
 				var ipWithoutColons = getUnchangeablePart(prefixWithoutLength).concat(getUnchangeablePartFromRecord(query.name));
@@ -269,12 +295,18 @@ function answerQuery(query, packet, type, sender, server) {
 			}
 		}
 	} else {
-		var staticAddressA = getStaticAddressFromRecord(query.name);
+		var shouldRefuseA = isPrefixDomainAllowed(query.name);
+
+		if (!shouldRefuseA) {
+			answerData.flags = REFUSED_RCODE;
+		}
+
+		/*var staticAddressA = getStaticAddressFromRecord(query.name);
 		var prefixA = getPrefixFromRecord(query.name);
 
 		if (!staticAddressA && !prefixA) {
 			answerData.flags = REFUSED_RCODE;
-		}
+		}*/
 	}
 
 	if ([NXDOMAIN_RCODE, REFUSED_RCODE].includes(answerData.flags) || answerData.answers.length === 0) {
@@ -493,8 +525,7 @@ event.on('query', function(type, msg, rinfo, server) {
 	try {
 		query = packet.questions[0];
 
-		//var supportedTypes = ['A', 'AAAA', 'CNAME', 'MX', 'NS', 'PTR', 'SRV', 'TXT'];
-		var supportedTypes = ['A', 'AAAA', 'PTR', 'NS'];
+		//var supportedTypes = ['A', 'AAAA', 'PTR', 'NS'];
 
 		if (query.type === 'TXT' && query.class === 'CH') {
 			return answerTXTCH(query, packet, type, rinfo, server);
