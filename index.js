@@ -318,7 +318,15 @@ function answerError(query, packet, type, rinfo, server, error) {
 	};
 
 	if (type === 'udp') {
-		server.send(dnsPacket.encode(answerDataError), rinfo.port, rinfo.address, function(err) {
+		var _pUdp;
+		try {
+			_pUdp = dnsPacket.encode(answerDataError);
+		} catch (_) {
+			answerDataError.questions = [];
+			_pUdp = dnsPacket.encode(answerDataError);
+		}
+
+		server.send(_pUdp, rinfo.port, rinfo.address, function(err) {
 			if (err) {
 				return console.error(err);
 			}
@@ -328,7 +336,15 @@ function answerError(query, packet, type, rinfo, server, error) {
 			}
 		});
 	} else {
-		rinfo.socket.write(dnsPacket.streamEncode(answerDataError), function() {
+		var _pTcp;
+		try {
+			_pTcp = dnsPacket.streamEncode(answerDataError);
+		} catch (_) {
+			answerDataError.questions = [];
+			_pTcp = dnsPacket.streamEncode(answerDataError);
+		}
+
+		rinfo.socket.write(_pTcp, function() {
 			if (config.logErrors) {
 				console.log(`Received invalid TCP request from ${rinfo.address}. Query ${query.type} ${query.name}. Answered with error code: 0x0${error}`);
 			}
