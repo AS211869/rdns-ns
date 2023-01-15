@@ -54,7 +54,53 @@ function getChangeablePart(address) {
 	prefix = prefix.prefix;
 	var prefixInfo = ip6.range(removePrefixLength(prefix), getPrefixLength(prefix), 128);
 	var diff = findFirstDiffPos(prefixInfo.start, prefixInfo.end);
-	return ip6.normalize(address).substring(diff).replace(/:/g, '');
+	let addr = ip6.normalize(address).substring(diff);
+
+	// It's a mess, but it works
+	// This code is required to replace only the longest stretch
+	// of zeroes with :: and to keep the rest of the address in
+	// the expanded format
+	let replaceStart = -1;
+	let replaceEnd = -1;
+	let lastReplaceStart = -1;
+	let lastReplaceEnd = -1;
+	let isReplacing = false;
+	let addrParts = addr.split('');
+	for (var i = 0; i < addrParts.length; i++) {
+		if (addrParts[i] === ':' && isReplacing) {
+			lastReplaceEnd++;
+			continue;
+		}
+
+		if (addrParts[i] === '0') {
+			if (isReplacing === false) {
+				lastReplaceStart = i;
+				lastReplaceEnd = i;
+				isReplacing = true;
+			} else {
+				lastReplaceEnd++;
+			}
+		} else {
+			isReplacing = false;
+			if ((replaceEnd - replaceStart) < (lastReplaceEnd - lastReplaceStart)) {
+				replaceStart = lastReplaceStart;
+				replaceEnd = lastReplaceEnd;
+			}
+		}
+	}
+
+	if (replaceStart >= 0 && replaceEnd >= 0) {
+		var tmpAddr = addr.substr(0, replaceStart);
+		tmpAddr += tmpAddr.endsWith(':') ? ':' : '::';
+		tmpAddr += addr.substr(replaceEnd + 1);
+		tmpAddr = tmpAddr.replace('::', '--');
+
+		// A subdomain cannot end with a dash
+		if (!tmpAddr.endsWith('--')) {
+			addr = tmpAddr;
+		}
+	}
+	return addr.replace(/:/g, '');
 }
 
 function getUnchangeablePart(address) {
@@ -101,14 +147,12 @@ function isPrefixDomainAllowed(record) {
 	var staticAddress = getStaticAddressFromRecord(record);
 
 	var prefix = prefixes.filter(prefix => {
-		var _regex = `${prefix.recordFormat.replace('{addr}', '[0-9a-f]+').replace(/\./g, '\\.')}$`;
+		// eslint-disable-next-line no-useless-escape
+		var _regex = `${prefix.recordFormat.replace('{addr}', '[0-9a-f\-]+').replace(/\./g, '\\.')}$`;
 		var regex = new RegExp(_regex);
 
 		return regex.test(record);
 	})[0];
-
-	//console.log(staticAddress);
-	//console.log(prefix);
 
 	var shouldAllow = staticAddress || prefix;
 
@@ -117,7 +161,8 @@ function isPrefixDomainAllowed(record) {
 
 function getPrefixFromRecord(record) {
 	var prefix = prefixes.filter(prefix => {
-		var _regex = `^${prefix.recordFormat.replace('{addr}', '[0-9a-f]+').replace(/\./g, '\\.')}$`;
+		// eslint-disable-next-line no-useless-escape
+		var _regex = `^${prefix.recordFormat.replace('{addr}', '[0-9a-f\-]+').replace(/\./g, '\\.')}$`;
 		var regex = new RegExp(_regex);
 
 		return regex.test(record);
@@ -128,7 +173,8 @@ function getPrefixFromRecord(record) {
 
 function getUnchangeablePartFromRecord(record) {
 	var prefix = prefixes.filter(prefix => {
-		var _regex = prefix.recordFormat.replace('{addr}', '[0-9a-f]+').replace(/\./g, '\\.');
+		// eslint-disable-next-line no-useless-escape
+		var _regex = prefix.recordFormat.replace('{addr}', '[0-9a-f\-]+').replace(/\./g, '\\.');
 		var regex = new RegExp(_regex);
 
 		return regex.test(record);
@@ -138,7 +184,8 @@ function getUnchangeablePartFromRecord(record) {
 		return null;
 	}
 
-	var _regex = prefix.recordFormat.replace('{addr}', '([0-9a-f]+)').replace(/\./g, '\\.');
+	// eslint-disable-next-line no-useless-escape
+	var _regex = prefix.recordFormat.replace('{addr}', '([0-9a-f\-]+)').replace(/\./g, '\\.');
 	var regex = new RegExp(_regex);
 
 	return regex.exec(record)[1];
@@ -198,7 +245,6 @@ serverTCPV4.on('connection', (socket) => {
 		console.log(`TCP connection from ${socket.remoteAddress}:${socket.remotePort}`);
 	}
 	socket.on('data', function(data) {
-		//console.log(data.toString());
 		event.emit('query', 'tcp', data, {
 			address: socket.remoteAddress,
 			port: socket.remotePort,
@@ -212,7 +258,6 @@ serverTCPV6.on('connection', (socket) => {
 		console.log(`TCP connection from ${socket.remoteAddress}:${socket.remotePort}`);
 	}
 	socket.on('data', function(data) {
-		//console.log(data.toString());
 		event.emit('query', 'tcp', data, {
 			address: socket.remoteAddress,
 			port: socket.remotePort,
@@ -289,6 +334,15 @@ function answerQuery(query, packet, type, sender, server) {
 
 					var ipWithoutColons = getUnchangeablePart(prefixWithoutLength).concat(getUnchangeablePartFromRecord(query.name));
 
+					if (ipWithoutColons.includes('--')) {
+						var zerosToAdd = 32 - ipWithoutColons.replace('--', '').length;
+						var zeros = '';
+						for (var i = 0; i < zerosToAdd; i++) {
+							zeros += '0';
+						}
+						ipWithoutColons = ipWithoutColons.replace('--', zeros);
+					}
+
 					// eslint-disable-next-line no-redeclare
 					var addColons = ip6.abbreviate(chunk(ipWithoutColons, 4).join(':'));
 
@@ -308,13 +362,6 @@ function answerQuery(query, packet, type, sender, server) {
 		if (!shouldRefuseA) {
 			answerData.flags = REFUSED_RCODE;
 		}
-
-		/*var staticAddressA = getStaticAddressFromRecord(query.name);
-		var prefixA = getPrefixFromRecord(query.name);
-
-		if (!staticAddressA && !prefixA) {
-			answerData.flags = REFUSED_RCODE;
-		}*/
 	}
 
 	if ([NXDOMAIN_RCODE, REFUSED_RCODE].includes(answerData.flags) || answerData.answers.length === 0) {
@@ -517,14 +564,12 @@ function answerCache(answerData, type, rinfo, server) {
 }
 
 event.on('query', function(type, msg, rinfo, server) {
-	//console.log(`server got: ${msg} from ${rinfo.address}:${rinfo.port}`);
 	let packet;
 	if (type === 'udp') {
 		packet = dnsPacket.decode(msg);
 	} else {
 		packet = dnsPacket.streamDecode(msg);
 	}
-	//console.log(packet);
 
 	let query;
 
@@ -533,22 +578,9 @@ event.on('query', function(type, msg, rinfo, server) {
 	try {
 		query = packet.questions[0];
 
-		//var supportedTypes = ['A', 'AAAA', 'PTR', 'NS'];
-
 		if (query.type === 'TXT' && query.class === 'CH') {
 			return answerTXTCH(query, packet, type, rinfo, server);
 		}
-
-		/*if (!supportedTypes.includes(query.type)) {
-			_throwError = NOTIMP_RCODE;
-			throw new Error();
-		}*/
-
-		/*if (query.type === 'A') {
-			// IPv4 is not supported
-			_throwError = NOERROR_RCODE;
-			throw new Error();
-		}*/
 	} catch (e) {
 		answerError(query, packet, type, rinfo, server, _throwError);
 
