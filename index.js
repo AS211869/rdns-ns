@@ -67,8 +67,6 @@ function getChangeablePart(address) {
 		return null;
 	}
 
-	console.log(address);
-
 	prefix = prefix.prefix;
 	var prefixInfo = ip6.range(removePrefixLength(prefix), getPrefixLength(prefix), 128);
 	var diff = findFirstDiffPos(prefixInfo.start, prefixInfo.end);
