@@ -67,6 +67,8 @@ function getChangeablePart(address) {
 		return null;
 	}
 
+	console.log(address);
+
 	prefix = prefix.prefix;
 	var prefixInfo = ip6.range(removePrefixLength(prefix), getPrefixLength(prefix), 128);
 	var diff = findFirstDiffPos(prefixInfo.start, prefixInfo.end);
@@ -76,7 +78,7 @@ function getChangeablePart(address) {
 	// This code is required to replace only the longest stretch
 	// of zeroes with :: and to keep the rest of the address in
 	// the expanded format
-	if (address.includes('::')) {
+	if (address.includes('::') || address.includes(':0:')) {
 		let replaceStart = -1;
 		let replaceEnd = -1;
 		let lastReplaceStart = -1;
@@ -103,7 +105,9 @@ function getChangeablePart(address) {
 				} else {
 					lastReplaceEnd++;
 				}
-			} else {
+			}
+
+			if (addrParts[i] !== '0' || addrParts.length - 1 === i) {
 				isReplacing = false;
 				if ((replaceEnd - replaceStart) < (lastReplaceEnd - lastReplaceStart)) {
 					replaceStart = lastReplaceStart;
@@ -120,6 +124,9 @@ function getChangeablePart(address) {
 
 			// A subdomain cannot end with a dash
 			if (!tmpAddr.endsWith('--')) {
+				addr = tmpAddr;
+			} else if (replaceEnd - replaceStart >= 3) {
+				tmpAddr += '0';
 				addr = tmpAddr;
 			}
 		}
