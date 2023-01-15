@@ -46,11 +46,27 @@ function findPrefix(address) {
 	return prefixes.filter(prefix => isInSubnet(address, prefix.prefix))[0];
 }
 
+function onlyZeroesAtStart(string) {
+	var hasNonZero = false;
+
+	var stringArr = string.split('');
+	for (var i = 0; i < stringArr.length; i++) {
+		if (stringArr[i] !== '0') {
+			hasNonZero = true;
+		} else if (hasNonZero) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
 function getChangeablePart(address) {
 	var prefix = findPrefix(address);
 	if (!prefix) {
 		return null;
 	}
+
 	prefix = prefix.prefix;
 	var prefixInfo = ip6.range(removePrefixLength(prefix), getPrefixLength(prefix), 128);
 	var diff = findFirstDiffPos(prefixInfo.start, prefixInfo.end);
@@ -60,46 +76,55 @@ function getChangeablePart(address) {
 	// This code is required to replace only the longest stretch
 	// of zeroes with :: and to keep the rest of the address in
 	// the expanded format
-	let replaceStart = -1;
-	let replaceEnd = -1;
-	let lastReplaceStart = -1;
-	let lastReplaceEnd = -1;
-	let isReplacing = false;
-	let addrParts = addr.split('');
-	for (var i = 0; i < addrParts.length; i++) {
-		if (addrParts[i] === ':' && isReplacing) {
-			lastReplaceEnd++;
-			continue;
-		}
+	if (address.includes('::')) {
+		let replaceStart = -1;
+		let replaceEnd = -1;
+		let lastReplaceStart = -1;
+		let lastReplaceEnd = -1;
+		let isReplacing = false;
+		let addrParts = addr.split('');
+		let currentGroupStartsWithZero = false;
+		for (var i = 0; i < addrParts.length; i++) {
+			if (addrParts[i] === ':') {
+				currentGroupStartsWithZero = onlyZeroesAtStart(addrParts.join('').substr(i + 1, 4));
 
-		if (addrParts[i] === '0') {
-			if (isReplacing === false) {
-				lastReplaceStart = i;
-				lastReplaceEnd = i;
-				isReplacing = true;
+				if (currentGroupStartsWithZero && isReplacing) {
+					lastReplaceEnd++;
+				}
+
+				continue;
+			}
+
+			if (addrParts[i] === '0' && currentGroupStartsWithZero) {
+				if (isReplacing === false) {
+					lastReplaceStart = i;
+					lastReplaceEnd = i;
+					isReplacing = true;
+				} else {
+					lastReplaceEnd++;
+				}
 			} else {
-				lastReplaceEnd++;
+				isReplacing = false;
+				if ((replaceEnd - replaceStart) < (lastReplaceEnd - lastReplaceStart)) {
+					replaceStart = lastReplaceStart;
+					replaceEnd = lastReplaceEnd;
+				}
 			}
-		} else {
-			isReplacing = false;
-			if ((replaceEnd - replaceStart) < (lastReplaceEnd - lastReplaceStart)) {
-				replaceStart = lastReplaceStart;
-				replaceEnd = lastReplaceEnd;
+		}
+
+		if (replaceStart >= 0 && replaceEnd >= 0 && replaceEnd - replaceStart >= 2) {
+			var tmpAddr = addr.substr(0, replaceStart);
+			tmpAddr += tmpAddr.endsWith(':') ? ':' : '::';
+			tmpAddr += addr.substr(replaceEnd + 1);
+			tmpAddr = tmpAddr.replace('::', '--');
+
+			// A subdomain cannot end with a dash
+			if (!tmpAddr.endsWith('--')) {
+				addr = tmpAddr;
 			}
 		}
 	}
 
-	if (replaceStart >= 0 && replaceEnd >= 0) {
-		var tmpAddr = addr.substr(0, replaceStart);
-		tmpAddr += tmpAddr.endsWith(':') ? ':' : '::';
-		tmpAddr += addr.substr(replaceEnd + 1);
-		tmpAddr = tmpAddr.replace('::', '--');
-
-		// A subdomain cannot end with a dash
-		if (!tmpAddr.endsWith('--')) {
-			addr = tmpAddr;
-		}
-	}
 	return addr.replace(/:/g, '');
 }
 
