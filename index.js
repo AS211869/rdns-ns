@@ -47,8 +47,10 @@ function findPrefix(address) {
 }
 
 function onlyZeroesAtStart(string) {
-	var hasNonZero = false;
+	return string.startsWith('0');
 
+	// No idea what I was thinking with this
+	var hasNonZero = false;
 	var stringArr = string.split('');
 	for (var i = 0; i < stringArr.length; i++) {
 		if (stringArr[i] !== '0') {
